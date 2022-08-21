@@ -1,15 +1,20 @@
 #include "remoteserver.hpp"
 
 #include <Arduino.h>
-#include <ESPmDNS.h>
+// #include <ESPmDNS.h>
 #include <WiFi.h>
+#include <ESPAsyncWebServer.h>
+
+#include "favicon.h"
 
 static constexpr char *ssid = "Laser level platform";
 static constexpr char *password = "laserlevel15";
-static constexpr char *staticUrl = "laserlevel";
+// static constexpr char *staticUrl = "laserlevel";
 
 static constexpr uint16_t port = 80;
 static String instanceName = "Laser level platform";
+
+static constexpr int HTTP_OK = 200;
 
 static bool prepareAp();
 static bool stopAp();
@@ -18,7 +23,8 @@ static void watchConnectionsCount();
 static bool startMDns();
 static bool startListeningServerConnections();
 
-static WiFiServer server(port);
+static AsyncWebServer server(port);
+// static WiFiServer server(port);
 
 static void printCore()
 {
@@ -31,7 +37,27 @@ void remoteContolServerTaks(void *args)
     if (prepareAp())
     {
         // watchConnectionsCount();
-        startListeningServerConnections();
+        // startMDns();
+
+        server.on("/hello",
+                  HTTP_GET,
+                  [](AsyncWebServerRequest *request)
+                  {
+                      printCore();
+                      request->send(HTTP_OK, "text/plain", "Hello from the Laser level platform. The laserest platform ever.");
+                  });
+        server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest *request)
+                  { request->send_P(HTTP_OK, "image/x-icon", favicon, sizeof(favicon)); });
+        server.on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request)
+                  {
+                      printCore();
+                      request->send(HTTP_OK, "application/json", "{\"error\":\"none\",\"linear\":\"stopped\", \"rotation\":\"ccw\"}"); });
+        server.onNotFound([](AsyncWebServerRequest *request)
+                          {
+                              printCore();
+                              Serial.println("Not defined for request: \"" + request->url() + "\"");
+                              request->send(404, "text/plain", "The content you are looking for was not found."); });
+        server.begin();
     }
     else
     {
@@ -79,42 +105,44 @@ bool stopAp()
     return true;
 }
 
-bool startListeningServerConnections()
-{
-    server.begin();
+// bool startListeningServerConnections()
+// {
+//     server.begin();
 
-    while (true)
-    {
-        WiFiClient client = server.available();
-        Serial.println("Got a client");
-        client.stop();
-        Serial.println("Client disconnected");
-    }
+//     while (true)
+//     {
+//         WiFiClient client = server.available();
+//         Serial.println("Got a client");
+//         client.stop();
+//         Serial.println("Client disconnected");
+//     }
 
-    return true;
-}
+//     return true;
+// }
 
-bool startMDns()
-{
-    if (!MDNS.begin(staticUrl)) {
-        Serial.print("Could not start mDNS with URL: \"");
-        Serial.print(staticUrl);
-        Serial.println("\"");
-        return false;
-    }
+// bool startMDns()
+// {
+//     if (!MDNS.begin(staticUrl))
+//     {
+//         Serial.print("Could not start mDNS with URL: \"");
+//         Serial.print(staticUrl);
+//         Serial.println("\"");
+//         return false;
+//     }
 
-    if (!MDNS.addService("_http", "_tcp", port)) { // leading underscore is not mandatory, functions adds it if not added
-        Serial.print("Could not add service \"http\", protocol: \"tcp\", port: ");
-        Serial.print(port);
-        Serial.println(". Stopping mDNS");
+//     if (!MDNS.addService("_http", "_tcp", port))
+//     { // leading underscore is not mandatory, functions adds it if not added
+//         Serial.print("Could not add service \"http\", protocol: \"tcp\", port: ");
+//         Serial.print(port);
+//         Serial.println(". Stopping mDNS");
 
-        MDNS.end();
-        return false;
-    }
-    MDNS.setInstanceName(instanceName);
+//         MDNS.end();
+//         return false;
+//     }
+//     MDNS.setInstanceName(instanceName);
 
-    return true;
-}
+//     return true;
+// }
 
 void watchConnectionsCount()
 {
