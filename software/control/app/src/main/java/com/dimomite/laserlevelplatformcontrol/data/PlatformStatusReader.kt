@@ -12,22 +12,42 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class PlatformStatusReader @Inject constructor() {
+class PlatformStatusReader @Inject constructor(
+    private val platformControl: PlatformControl,
+) {
     fun status(): Flowable<PlatformStatus> = flow
 
     private val flow: Flowable<PlatformStatus> = Flowable.interval(
         1_000, TimeUnit.MILLISECONDS
-    ).switchMap {
-        val id = it.toInt()
+    ).switchMap { readStatus() }
+        .subscribeOn(Schedulers.io())
+        .unsubscribeOn(Schedulers.io())
+        .observeOn(AndroidSchedulers.mainThread())
+        .replay(1).refCount()
+
+    private fun stubStatus(idLong: Long): Flowable<PlatformStatus> {
+        val id = idLong.toInt()
         val status = PlatformStatus(
             linear = LinearMovementState.values()[id % LinearMovementState.values().size],
             rotation = RotationMovementState.values()[id % RotationMovementState.values().size],
             error = PlatformError.values()[id % PlatformError.values().size],
         )
-        Flowable.just(status)
+
+        return Flowable.just(status)
     }
-        .subscribeOn(Schedulers.io())
-        .unsubscribeOn(Schedulers.io())
-        .observeOn(AndroidSchedulers.mainThread())
-        .replay(1).refCount()
+
+    private fun readStatus(): Flowable<PlatformStatus> {
+        val response = platformControl.readStatus().execute()
+        return if (response.isSuccessful) {
+            val ps = response.body()
+            if (ps != null) {
+                Flowable.just(ps)
+            } else {
+                Flowable.empty()
+            }
+        } else {
+            Flowable.empty()
+        }
+    }
+
 }
