@@ -17,7 +17,7 @@ object DataModule {
     @Singleton
     fun retrofit(): Retrofit =
         Retrofit.Builder()
-            .baseUrl("http://192.168.4.1/api/")
+            .baseUrl("http://192.168.4.1/")
             .addConverterFactory(MoshiConverterFactory.create())
             .build()
 

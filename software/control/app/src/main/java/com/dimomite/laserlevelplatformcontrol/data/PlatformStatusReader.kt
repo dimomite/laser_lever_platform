@@ -1,5 +1,7 @@
 package com.dimomite.laserlevelplatformcontrol.data
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import com.dimomite.laserlevelplatformcontrol.domain.LinearMovementState
 import com.dimomite.laserlevelplatformcontrol.domain.PlatformError
 import com.dimomite.laserlevelplatformcontrol.domain.PlatformStatus
@@ -48,6 +50,13 @@ class PlatformStatusReader @Inject constructor(
         } else {
             Flowable.empty()
         }
+    }
+
+    fun favicon(): Bitmap? {
+        val response = platformControl.readFavIcon().execute()
+        return if (response.isSuccessful) {
+            BitmapFactory.decodeStream(response.body()!!.byteStream())
+        } else null
     }
 
 }
