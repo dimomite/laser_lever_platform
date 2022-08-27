@@ -1,11 +1,12 @@
 #include "remoteserver.hpp"
 
 #include <Arduino.h>
-// #include <ESPmDNS.h>
-#include <WiFi.h>
+#include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>
+#include <WiFi.h>
 
 #include "favicon.h"
+#include "motorcontol.h"
 
 static constexpr char *ssid = "Laser level platform";
 static constexpr char *password = "laserlevel15";
@@ -16,6 +17,10 @@ static String instanceName = "Laser level platform";
 
 static constexpr int HTTP_OK = 200;
 
+extern SemaphoreHandle_t mutex;
+extern PlatformStatus platformStatus;
+static StaticJsonDocument<1024> doc;
+
 static bool prepareAp();
 static bool stopAp();
 
@@ -24,12 +29,69 @@ static bool startMDns();
 static bool startListeningServerConnections();
 
 static AsyncWebServer server(port);
-// static WiFiServer server(port);
 
 static void printCore()
 {
-    Serial.print("Running WiFi access point logic on core #");
-    Serial.println(xPortGetCoreID());
+    // Serial.print("Running WiFi access point logic on core #");
+    // Serial.println(xPortGetCoreID());
+}
+
+static void updateJsonFromPlatformStatus()
+{
+    if (xSemaphoreTake(mutex, 10 / portTICK_PERIOD_MS) == pdTRUE)
+    {
+        auto status = platformStatus; // make a local copy
+        xSemaphoreGive(mutex);        // release mutex
+
+        doc.clear();
+        switch (status.linear)
+        {
+        case LinearMovementState::UNDEFINED:
+            doc["linear"] = "undef";
+            break;
+        case LinearMovementState::STOPPED:
+            doc["linear"] = "stopped";
+            break;
+        case LinearMovementState::MOVING_LEFT:
+            doc["linear"] = "movingleft";
+            break;
+        case LinearMovementState::MOVING_RIGHT:
+            doc["linear"] = "movingright";
+            break;
+        case LinearMovementState::REACHED_MAX_LEFT:
+            doc["linear"] = "maxleft";
+            break;
+        case LinearMovementState::REACHED_MAX_RIGHT:
+            doc["linear"] = "maxright";
+            break;
+        }
+
+        switch (status.rotation)
+        {
+        case RotationMovementState::UNDEFINED:
+            doc["rotation"] = "undef";
+            break;
+        case RotationMovementState::STOPPED:
+            doc["rotation"] = "stopped";
+            break;
+        case RotationMovementState::TURNING_CW:
+            doc["rotation"] = "cw";
+            break;
+        case RotationMovementState::TURNING_CCW:
+            doc["rotation"] = "ccw";
+            break;
+        }
+
+        switch (status.error)
+        {
+        case PlatformError::NONE:
+            doc["error"] = "none";
+            break;
+        case PlatformError::BOTH_END_STOPS_ACTIVE:
+            doc["error"] = "bothendstopsactive";
+            break;
+        }
+    }
 }
 
 void remoteContolServerTaks(void *args)
@@ -46,12 +108,19 @@ void remoteContolServerTaks(void *args)
                       printCore();
                       request->send(HTTP_OK, "text/plain", "Hello from the Laser level platform. The laserest platform ever.");
                   });
+
         server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest *request)
                   { request->send_P(HTTP_OK, "image/x-icon", favicon, sizeof(favicon)); });
+
         server.on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request)
                   {
-                      printCore();
-                      request->send(HTTP_OK, "application/json", "{\"error\":\"none\",\"linear\":\"stopped\", \"rotation\":\"ccw\"}"); });
+                    updateJsonFromPlatformStatus();
+                    String buff = "";
+                    serializeJson(doc, buff);
+                    printCore();
+                    // request->send(HTTP_OK, "application/json", "{\"error\":\"none\",\"linear\":\"stopped\", \"rotation\":\"ccw\"}");
+                    request->send(HTTP_OK, "application/json", buff); });
+
         server.onNotFound([](AsyncWebServerRequest *request)
                           {
                               printCore();

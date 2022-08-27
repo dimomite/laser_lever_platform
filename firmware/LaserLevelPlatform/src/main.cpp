@@ -6,6 +6,7 @@
 #include <Adafruit_SSD1306.h>
 
 #include "remoteserver.hpp"
+#include "motorcontol.h"
 
 #define DEBUG_INPUT (false)
 #define DEBUG_OUT_ACTIONS (false)
@@ -26,6 +27,14 @@
 #define OUT_D (15)
 
 static Adafruit_SSD1306 display(128, 64, &Wire, -1);
+
+SemaphoreHandle_t mutex = nullptr;
+static StaticSemaphore_t mutexBuffer;
+PlatformStatus platformStatus = {
+    .linear = LinearMovementState::UNDEFINED,
+    .rotation = RotationMovementState::UNDEFINED,
+    .error = PlatformError::NONE,
+};
 
 static void startServerTask()
 {
@@ -57,7 +66,7 @@ void setup()
     Serial.println("Connected to the display");
     display.clearDisplay();
     display.drawCircle(16, 16, 8, WHITE);
-    display.fillCircle(28 , 16, 8, WHITE);
+    display.fillCircle(28, 16, 8, WHITE);
     display.display();
   }
   else
@@ -82,6 +91,13 @@ void setup()
   pinMode(IN_MOVE_RIGHT, INPUT_PULLUP);
   pinMode(IN_TURN_CW, INPUT_PULLUP);
   pinMode(IN_TURN_CCW, INPUT_PULLUP);
+
+  // prepare mutex for platformStatus
+  mutex = xSemaphoreCreateMutexStatic(&mutexBuffer);
+  if (mutex)
+    Serial.println("Mutex created.");
+  else
+    Serial.println("Could not create mutex.");
 
   startServerTask();
 }
@@ -174,17 +190,24 @@ void loop()
   }
 #endif
 
+  LinearMovementState linear = LinearMovementState::UNDEFINED;
+  RotationMovementState rotation = RotationMovementState::UNDEFINED;
+  PlatformError error = PlatformError::NONE;
+
   isAlarmOn = false;
   if (isLeftMax && isRightMax)
   {
+    error = PlatformError::BOTH_END_STOPS_ACTIVE;
     Serial.println("!!! End stops error, both are active !!!");
     isAlarmOn = true;
   }
+
   if (isMoveLeft && isMoveRight)
   {
     Serial.println("!!! Move left and right commands are received at the same time !!!");
     isAlarmOn = true;
   }
+
   if (isTurnCW && isTurnCCW)
   {
     Serial.println("!!! Turn CW and CCW commands are received at the same time !!!");
@@ -200,36 +223,92 @@ void loop()
     digitalWrite(LED_ALARM, LOW);
   }
 
-  if (isAlarmOn)
+  if (isAlarmOn) // TODO this one will block status update
     return;
 
-  if (isMoveLeft && !isLeftMax)
+  if (!isMoveLeft && !isMoveRight)
   {
-    moveLeft();
+    linear = LinearMovementState::STOPPED;
   }
-  else if (isMoveRight && !isRightMax)
+
+  if (!isLeftMax)
   {
-    moveRight();
+    if (isMoveLeft)
+    {
+      linear = LinearMovementState::MOVING_LEFT;
+    }
   }
   else
   {
+    if (!isMoveRight)
+    {
+      linear = LinearMovementState::REACHED_MAX_LEFT;
+    }
+  }
+
+  if (!isRightMax)
+  {
+    if (isMoveRight)
+    {
+      linear = LinearMovementState::MOVING_RIGHT;
+    }
+  }
+  else
+  {
+    if (!isMoveLeft)
+    {
+      linear = LinearMovementState::REACHED_MAX_RIGHT;
+    }
+  }
+
+  switch (linear)
+  {
+  case LinearMovementState::MOVING_LEFT:
+    moveLeft();
+    break;
+  case LinearMovementState::MOVING_RIGHT:
+    moveRight();
+    break;
+  case LinearMovementState::STOPPED:
+  case LinearMovementState::REACHED_MAX_LEFT:
+  case LinearMovementState::REACHED_MAX_RIGHT:
+  case LinearMovementState::UNDEFINED:
     stopMoving();
+    break;
   }
 
   if (isTurnCW)
   {
+    rotation = RotationMovementState::TURNING_CW;
     turnCW();
   }
   else if (isTurnCCW)
   {
+    rotation = RotationMovementState::TURNING_CCW;
     turnCCW();
   }
   else
   {
+    rotation = RotationMovementState::STOPPED;
     stopTurning();
   }
 
   // printCore();
+
+  if (mutex)
+  {
+    if (xSemaphoreTake(mutex, 10 / portTICK_PERIOD_MS) == pdTRUE)
+    {
+      platformStatus.linear = linear;
+      platformStatus.rotation = rotation;
+      platformStatus.error = error;
+      xSemaphoreGive(mutex);
+    }
+    else
+    {
+      Serial.println("Could not take mutex to update platform status.");
+    }
+  }
 
   delay(50);
 }
