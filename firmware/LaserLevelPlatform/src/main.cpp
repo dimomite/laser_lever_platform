@@ -11,20 +11,22 @@
 #define DEBUG_INPUT (false)
 #define DEBUG_OUT_ACTIONS (false)
 
-#define LED_ALARM (2)
+#define LED_ALARM (16)
 
 #define IN_LEFT_MAX (25)
 #define IN_RIGHT_MAX (26)
 
-#define IN_MOVE_LEFT (5)
-#define IN_MOVE_RIGHT (16)
-#define IN_TURN_CW (4)
-#define IN_TURN_CCW (0)
+#define IN_MOVE_LEFT (14)
+#define IN_MOVE_RIGHT (12)
+#define IN_TURN_CW (13)
+#define IN_TURN_CCW (15)
 
-#define OUT_A (14)
-#define OUT_B (12)
-#define OUT_C (13)
-#define OUT_D (15)
+#define OUT_DIR_1 (0)
+#define OUT_STEP_1 (2)
+#define OUT_DIR_2 (5)
+#define OUT_STEP_2 (4)
+
+static constexpr touch_value_t threshold = 30;
 
 static Adafruit_SSD1306 display(128, 64, &Wire, -1);
 
@@ -40,7 +42,7 @@ static void startServerTask()
 {
   xTaskCreate(
       remoteContolServerTaks, // task function
-      "extraTask",            // task name
+      "server_task",          // task name
       10000,                  // stack size in words
       nullptr,                // args
       2,                      // priority
@@ -79,18 +81,19 @@ void setup()
 
   pinMode(LED_ALARM, OUTPUT);
 
-  pinMode(OUT_A, OUTPUT);
-  pinMode(OUT_B, OUTPUT);
-  pinMode(OUT_C, OUTPUT);
-  pinMode(OUT_D, OUTPUT);
+  pinMode(OUT_STEP_1, OUTPUT);
+  pinMode(OUT_DIR_1, OUTPUT);
+  pinMode(OUT_STEP_2, OUTPUT);
+  pinMode(OUT_DIR_2, OUTPUT);
+
+  digitalWrite(OUT_DIR_1, LOW);
+  digitalWrite(OUT_STEP_1, LOW);
+
+  digitalWrite(OUT_DIR_2, LOW);
+  digitalWrite(OUT_STEP_2, LOW);
 
   pinMode(IN_LEFT_MAX, INPUT_PULLUP);
   pinMode(IN_RIGHT_MAX, INPUT_PULLUP);
-
-  pinMode(IN_MOVE_LEFT, INPUT_PULLUP);
-  pinMode(IN_MOVE_RIGHT, INPUT_PULLUP);
-  pinMode(IN_TURN_CW, INPUT_PULLUP);
-  pinMode(IN_TURN_CCW, INPUT_PULLUP);
 
   // prepare mutex for platformStatus
   mutex = xSemaphoreCreateMutexStatic(&mutexBuffer);
@@ -106,8 +109,10 @@ static bool isAlarmOn = false;
 
 static void moveLeft()
 {
-  digitalWrite(OUT_C, LOW);
-  digitalWrite(OUT_D, HIGH);
+  digitalWrite(OUT_DIR_1, HIGH);
+  digitalWrite(OUT_STEP_1, HIGH);
+  delay(1);
+  digitalWrite(OUT_STEP_1, LOW);
 #if (DEBUG_OUT_ACTIONS)
   Serial.println("Moving left...");
 #endif
@@ -115,23 +120,23 @@ static void moveLeft()
 
 static void moveRight()
 {
-  digitalWrite(OUT_C, HIGH);
-  digitalWrite(OUT_D, LOW);
+  digitalWrite(OUT_DIR_1, LOW);
+  digitalWrite(OUT_STEP_1, HIGH);
+  delay(1);
+  digitalWrite(OUT_STEP_1, LOW);
 #if (DEBUG_OUT_ACTIONS)
   Serial.println("Moving right...");
 #endif
 }
 
-static void stopMoving()
-{
-  digitalWrite(OUT_C, LOW);
-  digitalWrite(OUT_D, LOW);
-}
+static void stopMoving() {}
 
 static void turnCW()
 {
-  digitalWrite(OUT_A, LOW);
-  digitalWrite(OUT_B, HIGH);
+  digitalWrite(OUT_DIR_2, HIGH);
+  digitalWrite(OUT_STEP_2, HIGH);
+  delay(1);
+  digitalWrite(OUT_STEP_2, LOW);
 #if (DEBUG_OUT_ACTIONS)
   Serial.println("Turning CW...");
 #endif
@@ -139,27 +144,25 @@ static void turnCW()
 
 static void turnCCW()
 {
-  digitalWrite(OUT_A, HIGH);
-  digitalWrite(OUT_B, LOW);
+  digitalWrite(OUT_DIR_2, LOW);
+  digitalWrite(OUT_STEP_2, HIGH);
+  delay(1);
+  digitalWrite(OUT_STEP_2, LOW);
 #if (DEBUG_OUT_ACTIONS)
   Serial.println("Turning CCW...");
 #endif
 }
 
-static void stopTurning()
-{
-  digitalWrite(OUT_A, LOW);
-  digitalWrite(OUT_B, LOW);
-}
+static void stopTurning() {}
 
 void loop()
 {
   auto isLeftMax = digitalRead(IN_LEFT_MAX) == HIGH;
   auto isRightMax = digitalRead(IN_RIGHT_MAX) == HIGH;
-  auto isMoveLeft = digitalRead(IN_MOVE_LEFT) == LOW;
-  auto isMoveRight = digitalRead(IN_MOVE_RIGHT) == LOW;
-  auto isTurnCW = digitalRead(IN_TURN_CW) == LOW;
-  auto isTurnCCW = digitalRead(IN_TURN_CCW) == LOW;
+  auto isMoveLeft = touchRead(IN_MOVE_LEFT) < threshold;
+  auto isMoveRight = touchRead(IN_MOVE_RIGHT) < threshold;
+  auto isTurnCW = touchRead(IN_TURN_CW) < threshold;
+  auto isTurnCCW = touchRead(IN_TURN_CCW) < threshold;
 
 #if (DEBUG_INPUT)
   if (isLeftMax)
