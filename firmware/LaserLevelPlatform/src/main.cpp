@@ -21,12 +21,18 @@
 #define IN_TURN_CW (13)
 #define IN_TURN_CCW (15)
 
-#define OUT_DIR_1 (0)
-#define OUT_STEP_1 (2)
-#define OUT_DIR_2 (5)
-#define OUT_STEP_2 (4)
+#define OUT_DIR_TURN (5)
+#define OUT_STEP_TURN (4)
+#define OUT_DIR_MOVE (0)
+#define OUT_STEP_MOVE (2)
 
-static constexpr touch_value_t threshold = 30;
+static constexpr touch_value_t threshold = 50;
+
+static constexpr uint8_t rotationStepsChannel = 0;
+static constexpr uint8_t movementStepsChannel = 1;
+static constexpr uint32_t stepsFrequency = 200; // in Hz
+static constexpr uint8_t stepsResolution = 18;
+static constexpr uint32_t stepWidth = (1 << (stepsResolution - 1)); // 1/8th of a pulse
 
 static Adafruit_SSD1306 display(128, 64, &Wire, -1);
 
@@ -57,6 +63,12 @@ static void printCore()
   Serial.println(xPortGetCoreID());
 }
 
+void IRAM_ATTR onPwmTimer()
+{
+  static bool isActive = false;
+  isActive = !isActive;
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -81,19 +93,40 @@ void setup()
 
   pinMode(LED_ALARM, OUTPUT);
 
-  pinMode(OUT_STEP_1, OUTPUT);
-  pinMode(OUT_DIR_1, OUTPUT);
-  pinMode(OUT_STEP_2, OUTPUT);
-  pinMode(OUT_DIR_2, OUTPUT);
+  pinMode(OUT_STEP_TURN, OUTPUT);
+  pinMode(OUT_DIR_TURN, OUTPUT);
+  pinMode(OUT_STEP_MOVE, OUTPUT);
+  pinMode(OUT_DIR_MOVE, OUTPUT);
 
-  digitalWrite(OUT_DIR_1, LOW);
-  digitalWrite(OUT_STEP_1, LOW);
-
-  digitalWrite(OUT_DIR_2, LOW);
-  digitalWrite(OUT_STEP_2, LOW);
+  digitalWrite(OUT_DIR_TURN, LOW);
+  digitalWrite(OUT_DIR_MOVE, LOW);
 
   pinMode(IN_LEFT_MAX, INPUT_PULLUP);
   pinMode(IN_RIGHT_MAX, INPUT_PULLUP);
+
+  // auto timer = timerBegin(0, 2, true);
+  // timerAlarmWrite(timer, 1000000, true);
+  auto rotationSetup = ledcSetup(rotationStepsChannel, stepsFrequency, stepsResolution);
+  auto linearSetup = ledcSetup(movementStepsChannel, stepsFrequency, stepsResolution);
+  if ((rotationSetup != 0) && (linearSetup != 0))
+  {
+    Serial.print("Rotation steps setup finish with frequency: ");
+    Serial.println(rotationSetup);
+
+    Serial.print("Movement steps setup finish with frequency: ");
+    Serial.println(linearSetup);
+
+    ledcAttachPin(OUT_STEP_MOVE, movementStepsChannel);
+    ledcAttachPin(OUT_STEP_TURN, rotationStepsChannel);
+
+    // timerAttachInterrupt(timer, onPwmTimer, false);
+    // timerAlarmEnable(timer);
+  }
+  else
+  {
+    // timerEnd(timer);
+    Serial.println("LEDC setup failed");
+  }
 
   // prepare mutex for platformStatus
   mutex = xSemaphoreCreateMutexStatic(&mutexBuffer);
@@ -103,16 +136,14 @@ void setup()
     Serial.println("Could not create mutex.");
 
   startServerTask();
-}
+} // setup()
 
 static bool isAlarmOn = false;
 
 static void moveLeft()
 {
-  digitalWrite(OUT_DIR_1, HIGH);
-  digitalWrite(OUT_STEP_1, HIGH);
-  delay(1);
-  digitalWrite(OUT_STEP_1, LOW);
+  digitalWrite(OUT_DIR_MOVE, HIGH);
+  ledcWrite(movementStepsChannel, stepWidth);
 #if (DEBUG_OUT_ACTIONS)
   Serial.println("Moving left...");
 #endif
@@ -120,23 +151,22 @@ static void moveLeft()
 
 static void moveRight()
 {
-  digitalWrite(OUT_DIR_1, LOW);
-  digitalWrite(OUT_STEP_1, HIGH);
-  delay(1);
-  digitalWrite(OUT_STEP_1, LOW);
+  digitalWrite(OUT_DIR_MOVE, LOW);
+  ledcWrite(movementStepsChannel, stepWidth);
 #if (DEBUG_OUT_ACTIONS)
   Serial.println("Moving right...");
 #endif
 }
 
-static void stopMoving() {}
+static void stopMoving()
+{
+  ledcWrite(movementStepsChannel, 0);
+}
 
 static void turnCW()
 {
-  digitalWrite(OUT_DIR_2, HIGH);
-  digitalWrite(OUT_STEP_2, HIGH);
-  delay(1);
-  digitalWrite(OUT_STEP_2, LOW);
+  digitalWrite(OUT_DIR_TURN, HIGH);
+  ledcWrite(rotationStepsChannel, stepWidth);
 #if (DEBUG_OUT_ACTIONS)
   Serial.println("Turning CW...");
 #endif
@@ -144,25 +174,39 @@ static void turnCW()
 
 static void turnCCW()
 {
-  digitalWrite(OUT_DIR_2, LOW);
-  digitalWrite(OUT_STEP_2, HIGH);
-  delay(1);
-  digitalWrite(OUT_STEP_2, LOW);
+  digitalWrite(OUT_DIR_TURN, LOW);
+  ledcWrite(rotationStepsChannel, stepWidth);
 #if (DEBUG_OUT_ACTIONS)
   Serial.println("Turning CCW...");
 #endif
 }
 
-static void stopTurning() {}
+static void stopTurning()
+{
+  ledcWrite(rotationStepsChannel, 0);
+}
 
 void loop()
 {
   auto isLeftMax = digitalRead(IN_LEFT_MAX) == HIGH;
   auto isRightMax = digitalRead(IN_RIGHT_MAX) == HIGH;
-  auto isMoveLeft = touchRead(IN_MOVE_LEFT) < threshold;
-  auto isMoveRight = touchRead(IN_MOVE_RIGHT) < threshold;
-  auto isTurnCW = touchRead(IN_TURN_CW) < threshold;
-  auto isTurnCCW = touchRead(IN_TURN_CCW) < threshold;
+  auto left = touchRead(IN_MOVE_LEFT);
+  auto right = touchRead(IN_MOVE_RIGHT);
+  auto cw = touchRead(IN_TURN_CW);
+  auto ccw = touchRead(IN_TURN_CCW);
+  auto isMoveLeft = left < threshold;
+  auto isMoveRight = right < threshold;
+  auto isTurnCW = cw < threshold;
+  auto isTurnCCW = ccw < threshold;
+
+  // Serial.print("Left: ");
+  // Serial.print(left);
+  // Serial.print(", right: ");
+  // Serial.print(right);
+  // Serial.print(", cw: ");
+  // Serial.print(cw);
+  // Serial.print(", ccw: ");
+  // Serial.println(ccw);
 
 #if (DEBUG_INPUT)
   if (isLeftMax)
