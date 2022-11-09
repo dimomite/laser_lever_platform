@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto">
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <data>
 
@@ -67,6 +68,61 @@
             android:text="@{model.data.error}"
             app:layout_constraintBaseline_toBaselineOf="@+id/textView4"
             app:layout_constraintStart_toEndOf="@+id/textView4" />
+
+        <Button
+            android:id="@+id/bt_turn_cw"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="16dp"
+            android:onClick="@{model::turnCW}"
+            android:text="Turn CW"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/bt_turn_ccw"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintHorizontal_chainStyle="packed"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <Button
+            android:id="@+id/bt_turn_ccw"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:onClick="@{model::turnCCW}"
+            android:text="Turn CCW"
+            app:layout_constraintBottom_toBottomOf="@+id/bt_turn_cw"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toEndOf="@+id/bt_turn_cw" />
+
+        <Button
+            android:id="@+id/bt_move_left"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="32dp"
+            android:onClick="@{model::moveLeft}"
+            android:text="Move left"
+            app:layout_constraintBottom_toTopOf="@+id/bt_turn_cw"
+            app:layout_constraintEnd_toStartOf="@+id/bt_move_right"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <Button
+            android:id="@+id/bt_move_right"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:onClick="@{model::moveRight}"
+            android:text="Move right"
+            app:layout_constraintBottom_toBottomOf="@+id/bt_move_left"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toEndOf="@+id/bt_move_left" />
 
         <!--        <ImageView
                     android:id="@+id/iv_logo"

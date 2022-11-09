@@ -44,6 +44,13 @@ PlatformStatus platformStatus = {
     .error = PlatformError::NONE,
 };
 
+static constexpr auto queueLength = 16;
+static constexpr auto queueBufferSize = queueLength * sizeof(ActionCommand);
+static StaticQueue_t staticCommandsQueue;
+static uint8_t commandsQueueBuffer[queueBufferSize];
+QueueHandle_t motorCommandsQueue;
+static ActionCommand cmdReceiver;
+
 static void startServerTask()
 {
   xTaskCreate(
@@ -134,6 +141,12 @@ void setup()
     Serial.println("Mutex created.");
   else
     Serial.println("Could not create mutex.");
+
+  motorCommandsQueue = xQueueCreateStatic(queueLength, sizeof(ActionCommand), commandsQueueBuffer, &staticCommandsQueue);
+  if (motorCommandsQueue)
+    Serial.println("Motor commands queue created.");
+  else
+    Serial.println("Could not create queue for motor commands.");
 
   startServerTask();
 } // setup()
@@ -308,6 +321,48 @@ void loop()
     }
   }
 
+  if (isTurnCW)
+  {
+    rotation = RotationMovementState::TURNING_CW;
+  }
+  else if (isTurnCCW)
+  {
+    rotation = RotationMovementState::TURNING_CCW;
+  }
+  else
+  {
+    rotation = RotationMovementState::STOPPED;
+  }
+
+  while (uxQueueMessagesWaiting(motorCommandsQueue))
+  {
+    auto received = xQueueReceive(motorCommandsQueue, &cmdReceiver, 0);
+    if (received)
+    {
+      switch (cmdReceiver.type)
+      {
+      case ActionCommandType::Left:
+        linear = LinearMovementState::MOVING_LEFT;
+        break;
+      case ActionCommandType::Right:
+        linear = LinearMovementState::MOVING_RIGHT;
+        break;
+      case ActionCommandType::CW:
+        rotation = RotationMovementState::TURNING_CW;
+        break;
+      case ActionCommandType::CCW:
+        rotation = RotationMovementState::TURNING_CCW;
+        break;
+      case ActionCommandType::Undefined:
+        break;
+      }
+    }
+    else
+    {
+      Serial.println("Has command in the buffer but could not receive");
+    }
+  }
+
   switch (linear)
   {
   case LinearMovementState::MOVING_LEFT:
@@ -324,20 +379,19 @@ void loop()
     break;
   }
 
-  if (isTurnCW)
+  switch (rotation)
   {
-    rotation = RotationMovementState::TURNING_CW;
+  case RotationMovementState::TURNING_CW:
     turnCW();
-  }
-  else if (isTurnCCW)
-  {
-    rotation = RotationMovementState::TURNING_CCW;
+    break;
+  case RotationMovementState::TURNING_CCW:
     turnCCW();
-  }
-  else
-  {
-    rotation = RotationMovementState::STOPPED;
+    break;
+  case RotationMovementState::STOPPED:
     stopTurning();
+    break;
+  case RotationMovementState::UNDEFINED:
+    break;
   }
 
   // printCore();

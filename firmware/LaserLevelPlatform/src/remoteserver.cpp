@@ -19,6 +19,9 @@ static constexpr int HTTP_OK = 200;
 
 extern SemaphoreHandle_t mutex;
 extern PlatformStatus platformStatus;
+
+extern QueueHandle_t motorCommandsQueue;
+
 static StaticJsonDocument<1024> doc;
 
 static bool prepareAp();
@@ -94,6 +97,56 @@ static void updateJsonFromPlatformStatus()
     }
 }
 
+static ActionCommandType decodeCommandType(const String &cmd)
+{
+    if (cmd.equals("\"left\""))
+        return ActionCommandType::Left;
+    if (cmd.equals("\"right\""))
+        return ActionCommandType::Right;
+    if (cmd.equals("\"cw\""))
+        return ActionCommandType::CW;
+    if (cmd.equals("\"ccw\""))
+        return ActionCommandType::CCW;
+
+    return ActionCommandType::Undefined;
+}
+
+static void handleMoveTurnMessages(AsyncWebServerRequest *request)
+{
+    auto dir = request->getParam("dir");
+    auto dist = request->getParam("dist");
+    if (dir && dist)
+    {
+        if (uxQueueSpacesAvailable(motorCommandsQueue))
+        {
+            ActionCommand cmd{
+                .type = decodeCommandType(dir->value()),
+                .duration = dist->value().toInt(),
+            };
+            auto sent = xQueueSend(motorCommandsQueue, &cmd, 0);
+            if (sent)
+            {
+                request->send(HTTP_OK);
+            }
+            else
+            {
+                Serial.println("Could not put command to queue");
+                request->send(507); // Insufficient Storage
+            }
+        }
+        else
+        {
+            Serial.println("No space in queue");
+            request->send(507); // Insufficient Storage
+        }
+    }
+    else
+    {
+        Serial.println("Bad request");
+        request->send(400); // Bad Request
+    }
+}
+
 void remoteContolServerTaks(void *args)
 {
     if (prepareAp())
@@ -118,8 +171,13 @@ void remoteContolServerTaks(void *args)
                     String buff = "";
                     serializeJson(doc, buff);
                     printCore();
-                    // request->send(HTTP_OK, "application/json", "{\"error\":\"none\",\"linear\":\"stopped\", \"rotation\":\"ccw\"}");
                     request->send(HTTP_OK, "application/json", buff); });
+
+        server.on("/api/move", HTTP_POST, [](AsyncWebServerRequest *request)
+                  { handleMoveTurnMessages(request); });
+
+        server.on("/api/turn", HTTP_POST, [](AsyncWebServerRequest *request)
+                  { handleMoveTurnMessages(request); });
 
         server.onNotFound([](AsyncWebServerRequest *request)
                           {

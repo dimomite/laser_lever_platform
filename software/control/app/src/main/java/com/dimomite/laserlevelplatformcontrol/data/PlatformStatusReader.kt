@@ -2,10 +2,8 @@ package com.dimomite.laserlevelplatformcontrol.data
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import com.dimomite.laserlevelplatformcontrol.domain.LinearMovementState
-import com.dimomite.laserlevelplatformcontrol.domain.PlatformError
-import com.dimomite.laserlevelplatformcontrol.domain.PlatformStatus
-import com.dimomite.laserlevelplatformcontrol.domain.RotationMovementState
+import com.dimomite.laserlevelplatformcontrol.domain.*
+import com.squareup.moshi.Moshi
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.core.Flowable
 import io.reactivex.rxjava3.schedulers.Schedulers
@@ -17,6 +15,13 @@ import javax.inject.Singleton
 class PlatformStatusReader @Inject constructor(
     private val platformControl: PlatformControl,
 ) {
+    private val moshi = Moshi.Builder().build()
+    private val directionAdapter = moshi.adapter(MoveDirection::class.java)
+    private val turnAdapter = moshi.adapter(TurnDirection::class.java)
+
+    private val okFlow: Flowable<Boolean> = Flowable.just(true)
+    private val nokFlow: Flowable<Boolean> = Flowable.just(false)
+
     fun status(): Flowable<PlatformStatus> = flow
 
     private val flow: Flowable<PlatformStatus> = Flowable.interval(
@@ -58,5 +63,27 @@ class PlatformStatusReader @Inject constructor(
             BitmapFactory.decodeStream(response.body()!!.byteStream())
         } else null
     }
+
+    fun move(dir: MoveDirection, distance: Int): Flowable<Boolean> =
+        Flowable.fromCallable {
+            platformControl.move(
+                direction = directionAdapter.toJson(dir),
+                distance = distance,
+            ).execute().isSuccessful
+        }
+            .subscribeOn(Schedulers.io())
+            .unsubscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread())
+
+    fun turn(dir: TurnDirection, distance: Int): Flowable<Boolean> =
+        Flowable.fromCallable {
+            platformControl.turn(
+                direction = turnAdapter.toJson(dir),
+                distance = distance,
+            ).execute().isSuccessful
+        }
+            .subscribeOn(Schedulers.io())
+            .unsubscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread())
 
 }
