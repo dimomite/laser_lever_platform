@@ -64,8 +64,10 @@ class PlatformStatusReader @Inject constructor(
         } else null
     }
 
-    fun move(dir: MoveDirection, distance: Int): Flowable<Boolean> =
-        Flowable.fromCallable {
+    fun move(dir: MoveDirection, distance: Int): Flowable<Boolean> {
+        if (distance <= 0) return Flowable.just(false)
+
+        return Flowable.fromCallable {
             platformControl.move(
                 direction = directionAdapter.toJson(dir),
                 distance = distance,
@@ -74,9 +76,12 @@ class PlatformStatusReader @Inject constructor(
             .subscribeOn(Schedulers.io())
             .unsubscribeOn(Schedulers.io())
             .observeOn(AndroidSchedulers.mainThread())
+    }
 
-    fun turn(dir: TurnDirection, distance: Int): Flowable<Boolean> =
-        Flowable.fromCallable {
+    fun turn(dir: TurnDirection, distance: Int): Flowable<Boolean> {
+        if (distance <= 0) return Flowable.just(false)
+
+        return Flowable.fromCallable {
             platformControl.turn(
                 direction = turnAdapter.toJson(dir),
                 distance = distance,
@@ -85,5 +90,6 @@ class PlatformStatusReader @Inject constructor(
             .subscribeOn(Schedulers.io())
             .unsubscribeOn(Schedulers.io())
             .observeOn(AndroidSchedulers.mainThread())
+    }
 
 }

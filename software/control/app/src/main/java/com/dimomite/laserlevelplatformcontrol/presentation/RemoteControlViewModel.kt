@@ -1,9 +1,10 @@
 package com.dimomite.laserlevelplatformcontrol.presentation
 
-import android.view.View
+import android.widget.RadioGroup
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.toLiveData
+import com.dimomite.laserlevelplatformcontrol.R
 import com.dimomite.laserlevelplatformcontrol.data.PlatformStatusReader
 import com.dimomite.laserlevelplatformcontrol.domain.*
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -48,28 +49,39 @@ class RemoteControlViewModel @Inject constructor(
 
     internal fun errorToText(er: PlatformError): String = er.toString()
 
-    fun moveLeft(v: View) {
-        subs.add(statusReader.move(MoveDirection.Left, 100)
+    fun moveLeft(rg: RadioGroup) {
+        subs.add(statusReader.move(MoveDirection.Left, getDuration(rg))
             .subscribe { Timber.d("moveLeft() finished with status: $it") }
         )
     }
 
-    fun moveRight(v: View) {
-        subs.add(statusReader.move(MoveDirection.Right, 100)
+    fun moveRight(rg: RadioGroup) {
+        subs.add(statusReader.move(MoveDirection.Right, getDuration(rg))
             .subscribe { Timber.d("moveRight() finished with status: $it") }
         )
     }
 
-    fun turnCW(v: View) {
-        subs.add(statusReader.turn(TurnDirection.CW, 50)
+    fun turnCW(rg: RadioGroup) {
+        subs.add(statusReader.turn(TurnDirection.CW, getDuration(rg))
             .subscribe { Timber.d("turnCW() finished with status: $it") }
         )
     }
 
-    fun turnCCW(v: View) {
-        subs.add(statusReader.turn(TurnDirection.CCW, 50)
+    fun turnCCW(rg: RadioGroup) {
+        subs.add(statusReader.turn(TurnDirection.CCW, getDuration(rg))
             .subscribe { Timber.d("turnCCW() finished with status: $it") }
         )
     }
+
+    private fun getDuration(rg: RadioGroup): Int =
+        when (val id = rg.checkedRadioButtonId) {
+            R.id.rb_10 -> 10
+            R.id.rb_100 -> 100
+            R.id.rb_500 -> 500
+            else -> {
+                Timber.d("No mapping for view id: $id")
+                0
+            }
+        }
 
 }

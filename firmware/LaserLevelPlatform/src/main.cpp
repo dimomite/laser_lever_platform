@@ -26,6 +26,9 @@
 #define OUT_DIR_MOVE (0)
 #define OUT_STEP_MOVE (2)
 
+static void stopMoving();
+static void stopTurning();
+
 static constexpr touch_value_t threshold = 50;
 
 static constexpr uint8_t rotationStepsChannel = 0;
@@ -33,6 +36,10 @@ static constexpr uint8_t movementStepsChannel = 1;
 static constexpr uint32_t stepsFrequency = 200; // in Hz
 static constexpr uint8_t stepsResolution = 18;
 static constexpr uint32_t stepWidth = (1 << (stepsResolution - 1)); // 1/8th of a pulse
+
+// duration of actions initiated by a button press
+static constexpr int32_t fixedMoveDuration = 10;
+static constexpr int32_t fixedTurnDuration = 10;
 
 static Adafruit_SSD1306 display(128, 64, &Wire, -1);
 
@@ -50,6 +57,9 @@ static StaticQueue_t staticCommandsQueue;
 static uint8_t commandsQueueBuffer[queueBufferSize];
 QueueHandle_t motorCommandsQueue;
 static ActionCommand cmdReceiver;
+
+static volatile int32_t movementCounter = 0;
+static volatile int32_t rotationCounter = 0;
 
 static void startServerTask()
 {
@@ -72,8 +82,25 @@ static void printCore()
 
 void IRAM_ATTR onPwmTimer()
 {
-  static bool isActive = false;
-  isActive = !isActive;
+  if (movementCounter > 0)
+  {
+    --movementCounter;
+    if (0 == movementCounter)
+    {
+      stopMoving();
+      Serial.println("Expired movement counter");
+    }
+  }
+
+  if (rotationCounter > 0)
+  {
+    --rotationCounter;
+    if (0 == rotationCounter)
+    {
+      stopTurning();
+      Serial.println("Expired rotation counter");
+    }
+  }
 }
 
 void setup()
@@ -111,8 +138,8 @@ void setup()
   pinMode(IN_LEFT_MAX, INPUT_PULLUP);
   pinMode(IN_RIGHT_MAX, INPUT_PULLUP);
 
-  // auto timer = timerBegin(0, 2, true);
-  // timerAlarmWrite(timer, 1000000, true);
+  auto timer = timerBegin(0, 2, true);
+  timerAlarmWrite(timer, 1000000, true);
   auto rotationSetup = ledcSetup(rotationStepsChannel, stepsFrequency, stepsResolution);
   auto linearSetup = ledcSetup(movementStepsChannel, stepsFrequency, stepsResolution);
   if ((rotationSetup != 0) && (linearSetup != 0))
@@ -126,12 +153,12 @@ void setup()
     ledcAttachPin(OUT_STEP_MOVE, movementStepsChannel);
     ledcAttachPin(OUT_STEP_TURN, rotationStepsChannel);
 
-    // timerAttachInterrupt(timer, onPwmTimer, false);
-    // timerAlarmEnable(timer);
+    timerAttachInterrupt(timer, onPwmTimer, false);
+    timerAlarmEnable(timer);
   }
   else
   {
-    // timerEnd(timer);
+    timerEnd(timer);
     Serial.println("LEDC setup failed");
   }
 
@@ -171,7 +198,7 @@ static void moveRight()
 #endif
 }
 
-static void stopMoving()
+void stopMoving()
 {
   ledcWrite(movementStepsChannel, 0);
 }
@@ -194,7 +221,7 @@ static void turnCCW()
 #endif
 }
 
-static void stopTurning()
+void stopTurning()
 {
   ledcWrite(rotationStepsChannel, 0);
 }
@@ -254,6 +281,14 @@ void loop()
   RotationMovementState rotation = RotationMovementState::UNDEFINED;
   PlatformError error = PlatformError::NONE;
 
+  if ((movementCounter > 0) && (isLeftMax || isRightMax))
+  {
+    // stop movement on reaching endstop
+    movementCounter = 0;
+    stopMoving();
+    // TODO need to add proper recovery from remove device when limit is reached
+  }
+
   isAlarmOn = false;
   if (isLeftMax && isRightMax)
   {
@@ -286,16 +321,12 @@ void loop()
   if (isAlarmOn) // TODO this one will block status update
     return;
 
-  if (!isMoveLeft && !isMoveRight)
-  {
-    linear = LinearMovementState::STOPPED;
-  }
-
   if (!isLeftMax)
   {
     if (isMoveLeft)
     {
       linear = LinearMovementState::MOVING_LEFT;
+      movementCounter = fixedMoveDuration;
     }
   }
   else
@@ -311,6 +342,7 @@ void loop()
     if (isMoveRight)
     {
       linear = LinearMovementState::MOVING_RIGHT;
+      movementCounter = fixedMoveDuration;
     }
   }
   else
@@ -324,14 +356,12 @@ void loop()
   if (isTurnCW)
   {
     rotation = RotationMovementState::TURNING_CW;
+    rotationCounter = fixedTurnDuration;
   }
   else if (isTurnCCW)
   {
     rotation = RotationMovementState::TURNING_CCW;
-  }
-  else
-  {
-    rotation = RotationMovementState::STOPPED;
+    rotationCounter = fixedTurnDuration;
   }
 
   while (uxQueueMessagesWaiting(motorCommandsQueue))
@@ -342,16 +372,26 @@ void loop()
       switch (cmdReceiver.type)
       {
       case ActionCommandType::Left:
-        linear = LinearMovementState::MOVING_LEFT;
+        if (!isLeftMax)
+        {
+          linear = LinearMovementState::MOVING_LEFT;
+          movementCounter = cmdReceiver.duration;
+        }
         break;
       case ActionCommandType::Right:
-        linear = LinearMovementState::MOVING_RIGHT;
+        if (!isRightMax)
+        {
+          linear = LinearMovementState::MOVING_RIGHT;
+          movementCounter = cmdReceiver.duration;
+        }
         break;
       case ActionCommandType::CW:
         rotation = RotationMovementState::TURNING_CW;
+        rotationCounter = cmdReceiver.duration;
         break;
       case ActionCommandType::CCW:
         rotation = RotationMovementState::TURNING_CCW;
+        rotationCounter = cmdReceiver.duration;
         break;
       case ActionCommandType::Undefined:
         break;
@@ -372,10 +412,11 @@ void loop()
     moveRight();
     break;
   case LinearMovementState::STOPPED:
+    stopMoving();
+    break;
   case LinearMovementState::REACHED_MAX_LEFT:
   case LinearMovementState::REACHED_MAX_RIGHT:
   case LinearMovementState::UNDEFINED:
-    stopMoving();
     break;
   }
 
