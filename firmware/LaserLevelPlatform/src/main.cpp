@@ -393,6 +393,14 @@ void loop()
         rotation = RotationMovementState::TURNING_CCW;
         rotationCounter = cmdReceiver.duration;
         break;
+      case ActionCommandType::StopMove:
+        linear = LinearMovementState::STOPPED;
+        movementCounter = 0;
+        break;
+      case ActionCommandType::StopTurn:
+        rotation = RotationMovementState::STOPPED;
+        rotationCounter = 0;
+        break;
       case ActionCommandType::Undefined:
         break;
       }

@@ -17,6 +17,12 @@ interface PlatformControl {
     @POST("api/move")
     fun move(@Query("dir") direction: String, @Query("dist") distance: Int): Call<ResponseBody>
 
+    @POST("api/stopmove")
+    fun stopMove(): Call<ResponseBody>
+
     @POST("api/turn")
     fun turn(@Query("dir") direction: String, @Query("dist") distance: Int): Call<ResponseBody>
+
+    @POST("api/stopturn")
+    fun stopTurn(): Call<ResponseBody>
 }

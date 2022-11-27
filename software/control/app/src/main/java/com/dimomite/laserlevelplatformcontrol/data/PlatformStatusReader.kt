@@ -94,6 +94,20 @@ class PlatformStatusReader @Inject constructor(
             .observeOn(AndroidSchedulers.mainThread())
     }
 
+    fun stopMove(): Flowable<Boolean> {
+        return Flowable.fromCallable {
+            val response = try {
+                platformControl.stopMove().execute()
+            } catch (_: IOException) {
+                return@fromCallable false
+            }
+            response.isSuccessful
+        }
+            .subscribeOn(Schedulers.io())
+            .unsubscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread())
+    }
+
     fun turn(dir: TurnDirection, distance: Int): Flowable<Boolean> {
         if (distance <= 0) return Flowable.just(false)
 
@@ -103,6 +117,20 @@ class PlatformStatusReader @Inject constructor(
                     direction = turnAdapter.toJson(dir),
                     distance = distance,
                 ).execute()
+            } catch (_: IOException) {
+                return@fromCallable false
+            }
+            response.isSuccessful
+        }
+            .subscribeOn(Schedulers.io())
+            .unsubscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread())
+    }
+
+    fun stopTurn(): Flowable<Boolean> {
+        return Flowable.fromCallable {
+            val response = try {
+                platformControl.stopTurn().execute()
             } catch (_: IOException) {
                 return@fromCallable false
             }

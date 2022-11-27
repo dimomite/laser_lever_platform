@@ -147,6 +147,32 @@ static void handleMoveTurnMessages(AsyncWebServerRequest *request)
     }
 }
 
+static void handleCommandRequest(AsyncWebServerRequest *request, const ActionCommandType command)
+{
+    if (uxQueueSpacesAvailable(motorCommandsQueue))
+    {
+        ActionCommand cmd{
+            .type = command,
+            .duration = 0,
+        };
+        auto sent = xQueueSend(motorCommandsQueue, &cmd, 0);
+        if (sent)
+        {
+            request->send(HTTP_OK);
+        }
+        else
+        {
+            Serial.println("Could not put command to queue");
+            request->send(507); // Insufficient Storage
+        }
+    }
+    else
+    {
+        Serial.println("No space in queue");
+        request->send(507); // Insufficient Storage
+    }
+}
+
 void remoteContolServerTaks(void *args)
 {
     if (prepareAp())
@@ -176,8 +202,14 @@ void remoteContolServerTaks(void *args)
         server.on("/api/move", HTTP_POST, [](AsyncWebServerRequest *request)
                   { handleMoveTurnMessages(request); });
 
+        server.on("/api/stopmove", HTTP_POST, [](AsyncWebServerRequest *request)
+                  { handleCommandRequest(request, ActionCommandType::StopMove); });
+
         server.on("/api/turn", HTTP_POST, [](AsyncWebServerRequest *request)
                   { handleMoveTurnMessages(request); });
+
+        server.on("/api/stopturn", HTTP_POST, [](AsyncWebServerRequest *request)
+                  { handleCommandRequest(request, ActionCommandType::StopTurn); });
 
         server.onNotFound([](AsyncWebServerRequest *request)
                           {

@@ -61,6 +61,11 @@ class RemoteControlViewModel @Inject constructor(
         )
     }
 
+    fun stopMove() {
+        subs.add(statusReader.stopMove()
+            .subscribe { Timber.d("stopMove() finished with status: $it") })
+    }
+
     fun turnCW(rg: RadioGroup) {
         subs.add(statusReader.turn(TurnDirection.CW, getDuration(rg))
             .subscribe { Timber.d("turnCW() finished with status: $it") }
@@ -71,6 +76,11 @@ class RemoteControlViewModel @Inject constructor(
         subs.add(statusReader.turn(TurnDirection.CCW, getDuration(rg))
             .subscribe { Timber.d("turnCCW() finished with status: $it") }
         )
+    }
+
+    fun stopTurn() {
+        subs.add(statusReader.stopTurn()
+            .subscribe { Timber.d("stopTurn() finished with status: $it") })
     }
 
     private fun getDuration(rg: RadioGroup): Int =

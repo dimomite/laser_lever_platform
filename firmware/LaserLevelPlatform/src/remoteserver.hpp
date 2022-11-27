@@ -12,6 +12,8 @@ typedef enum
     Right,
     CW,
     CCW,
+    StopMove,
+    StopTurn,
 } ActionCommandType;
 
 typedef struct
