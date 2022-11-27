@@ -7,6 +7,7 @@ import com.squareup.moshi.Moshi
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.core.Flowable
 import io.reactivex.rxjava3.schedulers.Schedulers
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -44,7 +45,12 @@ class PlatformStatusReader @Inject constructor(
     }
 
     private fun readStatus(): Flowable<PlatformStatus> {
-        val response = platformControl.readStatus().execute()
+        val response = try {
+            platformControl.readStatus().execute()
+        } catch (_: IOException) {
+            return Flowable.empty()
+        }
+
         return if (response.isSuccessful) {
             val ps = response.body()
             if (ps != null) {
@@ -58,7 +64,12 @@ class PlatformStatusReader @Inject constructor(
     }
 
     fun favicon(): Bitmap? {
-        val response = platformControl.readFavIcon().execute()
+        val response = try {
+            platformControl.readFavIcon().execute()
+        } catch (_: IOException) {
+            return null
+        }
+
         return if (response.isSuccessful) {
             BitmapFactory.decodeStream(response.body()!!.byteStream())
         } else null
@@ -68,10 +79,15 @@ class PlatformStatusReader @Inject constructor(
         if (distance <= 0) return Flowable.just(false)
 
         return Flowable.fromCallable {
-            platformControl.move(
-                direction = directionAdapter.toJson(dir),
-                distance = distance,
-            ).execute().isSuccessful
+            val response = try {
+                platformControl.move(
+                    direction = directionAdapter.toJson(dir),
+                    distance = distance,
+                ).execute()
+            } catch (_: IOException) {
+                return@fromCallable false
+            }
+            response.isSuccessful
         }
             .subscribeOn(Schedulers.io())
             .unsubscribeOn(Schedulers.io())
@@ -82,10 +98,15 @@ class PlatformStatusReader @Inject constructor(
         if (distance <= 0) return Flowable.just(false)
 
         return Flowable.fromCallable {
-            platformControl.turn(
-                direction = turnAdapter.toJson(dir),
-                distance = distance,
-            ).execute().isSuccessful
+            val response = try {
+                platformControl.turn(
+                    direction = turnAdapter.toJson(dir),
+                    distance = distance,
+                ).execute()
+            } catch (_: IOException) {
+                return@fromCallable false
+            }
+            response.isSuccessful
         }
             .subscribeOn(Schedulers.io())
             .unsubscribeOn(Schedulers.io())
