@@ -28,8 +28,6 @@ static bool prepareAp();
 static bool stopAp();
 
 static void watchConnectionsCount();
-static bool startMDns();
-static bool startListeningServerConnections();
 
 static AsyncWebServer server(port);
 
@@ -142,7 +140,9 @@ static void handleMoveTurnMessages(AsyncWebServerRequest *request)
     }
     else
     {
-        Serial.println("Bad request");
+        Serial.print("Bad request: \"");
+        Serial.print(request->url());
+        Serial.println("\"");
         request->send(400); // Bad Request
     }
 }
@@ -178,7 +178,6 @@ void remoteContolServerTaks(void *args)
     if (prepareAp())
     {
         // watchConnectionsCount();
-        // startMDns();
 
         server.on("/hello",
                   HTTP_GET,
@@ -263,45 +262,6 @@ bool stopAp()
     Serial.println("WiFi access point was stopped");
     return true;
 }
-
-// bool startListeningServerConnections()
-// {
-//     server.begin();
-
-//     while (true)
-//     {
-//         WiFiClient client = server.available();
-//         Serial.println("Got a client");
-//         client.stop();
-//         Serial.println("Client disconnected");
-//     }
-
-//     return true;
-// }
-
-// bool startMDns()
-// {
-//     if (!MDNS.begin(staticUrl))
-//     {
-//         Serial.print("Could not start mDNS with URL: \"");
-//         Serial.print(staticUrl);
-//         Serial.println("\"");
-//         return false;
-//     }
-
-//     if (!MDNS.addService("_http", "_tcp", port))
-//     { // leading underscore is not mandatory, functions adds it if not added
-//         Serial.print("Could not add service \"http\", protocol: \"tcp\", port: ");
-//         Serial.print(port);
-//         Serial.println(". Stopping mDNS");
-
-//         MDNS.end();
-//         return false;
-//     }
-//     MDNS.setInstanceName(instanceName);
-
-//     return true;
-// }
 
 void watchConnectionsCount()
 {
