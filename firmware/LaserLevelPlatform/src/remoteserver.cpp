@@ -7,6 +7,7 @@
 
 #include "favicon.h"
 #include "motorcontol.h"
+#include "webcontrolpage.h"
 
 static constexpr char *ssid = "Laser level platform";
 static constexpr char *password = "laserlevel15";
@@ -97,29 +98,51 @@ static void updateJsonFromPlatformStatus()
 
 static ActionCommandType decodeCommandType(const String &cmd)
 {
-    if (cmd.equals("\"left\""))
+    if (cmd.equals("left"))
         return ActionCommandType::Left;
-    if (cmd.equals("\"right\""))
+    if (cmd.equals("right"))
         return ActionCommandType::Right;
-    if (cmd.equals("\"cw\""))
+    if (cmd.equals("cw"))
         return ActionCommandType::CW;
-    if (cmd.equals("\"ccw\""))
+    if (cmd.equals("ccw"))
         return ActionCommandType::CCW;
 
     return ActionCommandType::Undefined;
 }
 
+static void logRequestArguments(AsyncWebServerRequest *const request)
+{
+    Serial.print(request->url());
+    Serial.print("\", args: ");
+    auto argsCount = request->args();
+    Serial.print(argsCount);
+    Serial.print(" => ");
+    for (auto i = 0; i < argsCount; ++i)
+    {
+        auto argName = request->argName(i);
+        Serial.print(argName);
+        Serial.print(": ");
+        Serial.print(request->arg(argName));
+        Serial.print(", ");
+    }
+    Serial.println();
+}
+
 static void handleMoveTurnMessages(AsyncWebServerRequest *request)
 {
-    auto dir = request->getParam("dir");
-    auto dist = request->getParam("dist");
-    if (dir && dist)
+    auto dir = request->arg("dir");
+    auto dist = request->arg("dist");
+
+    Serial.print("Got move/turn command: \"");
+    logRequestArguments(request);
+
+    if (!dir.isEmpty() && !dist.isEmpty())
     {
         if (uxQueueSpacesAvailable(motorCommandsQueue))
         {
             ActionCommand cmd{
-                .type = decodeCommandType(dir->value()),
-                .duration = dist->value().toInt(),
+                .type = decodeCommandType(dir),
+                .duration = dist.toInt(),
             };
             auto sent = xQueueSend(motorCommandsQueue, &cmd, 0);
             if (sent)
@@ -140,9 +163,8 @@ static void handleMoveTurnMessages(AsyncWebServerRequest *request)
     }
     else
     {
-        Serial.print("Bad request: \"");
-        Serial.print(request->url());
-        Serial.println("\"");
+        Serial.print("Bad request for move/turn command: \"");
+        logRequestArguments(request);
         request->send(400); // Bad Request
     }
 }
@@ -178,6 +200,9 @@ void remoteContolServerTaks(void *args)
     if (prepareAp())
     {
         // watchConnectionsCount();
+
+        server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+                  { request->send_P(HTTP_OK, "text/html", webControlPage); });
 
         server.on("/hello",
                   HTTP_GET,
