@@ -4,6 +4,7 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <Fonts/FreeSans9pt7b.h>
 
 #include "remoteserver.hpp"
 #include "motorcontol.h"
@@ -41,7 +42,7 @@ static constexpr uint32_t stepWidth = (1 << (stepsResolution - 1)); // 1/8th of 
 static constexpr int32_t fixedMoveDuration = 10;
 static constexpr int32_t fixedTurnDuration = 10;
 
-static Adafruit_SSD1306 display(128, 64, &Wire, -1);
+Adafruit_SSD1306 display(128, 64, &Wire, -1);
 
 SemaphoreHandle_t mutex = nullptr;
 static StaticSemaphore_t mutexBuffer;
@@ -112,10 +113,11 @@ void setup()
   if (display.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false))
   {
     Serial.println("Connected to the display");
+    display.setFont(&FreeSans9pt7b);
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+
     display.clearDisplay();
-    display.drawCircle(16, 16, 8, WHITE);
-    display.fillCircle(28, 16, 8, WHITE);
-    display.display();
   }
   else
   {

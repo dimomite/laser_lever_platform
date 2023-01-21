@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <Adafruit_SSD1306.h>
 #include <ESPAsyncWebServer.h>
 #include <WiFi.h>
 
@@ -22,6 +23,7 @@ extern SemaphoreHandle_t mutex;
 extern PlatformStatus platformStatus;
 
 extern QueueHandle_t motorCommandsQueue;
+extern Adafruit_SSD1306 display;
 
 static StaticJsonDocument<1024> doc;
 
@@ -272,6 +274,12 @@ bool prepareAp()
     Serial.print("SSID: \"");
     Serial.print(WiFi.softAPSSID());
     Serial.println("\"");
+
+    display.clearDisplay();
+    display.setCursor(0, 24);
+    display.println(password);
+    display.println(WiFi.softAPIP());
+    display.display();
 
     return true;
 }
